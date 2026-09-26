@@ -31,6 +31,7 @@ static uint16_t last_repeat_ms = 0U;
 
 static bool long_event_sent = false;
 static bool repeat_started = false;
+static bool ignore_until_release = false;
 
 static uint16_t keypad_abs_diff(uint16_t a, uint16_t b)
 {
@@ -220,6 +221,19 @@ button_event_t keypad_get_event(void)
 
     button_t raw_button = keypad_get_button();
 
+    if (ignore_until_release)
+    {
+        if (raw_button == BUTTON_NONE)
+        {
+            ignore_until_release = false;
+            last_raw_button = BUTTON_NONE;
+            stable_button = BUTTON_NONE;
+            last_raw_change_ms = now;
+            keypad_clear_press();
+        }
+        return BUTTON_EVENT_NONE;
+    }
+
     if (raw_button != last_raw_button)
     {
         last_raw_button = raw_button;
@@ -319,6 +333,14 @@ button_event_t keypad_get_event(void)
     }
 
     return BUTTON_EVENT_NONE;
+}
+
+void keypad_ignore_until_release(void)
+{
+    ignore_until_release = true;
+    last_raw_button = BUTTON_NONE;
+    stable_button = BUTTON_NONE;
+    keypad_clear_press();
 }
 
 void keypad_set_calibration(const keypad_calibration_t *calibration)

@@ -77,9 +77,12 @@ LOADER    = AUTO
 
 ---
 
-## MZT multi-record files
+## MZT, MZQ, QDF and QD multi-record images
 
-Opening an MZT first shows its record selector.
+Opening an MZT, MZQ, QDF or QD first shows its record selector. A QuickDisk entry is
+played as one MZF-style tape record; the image itself remains read-only. QD
+format selection is automatic for logical QDF/MZQ, HxC and FlashFloppy images.
+QDF and physical images show `QD SCAN n% / STOP=CANCEL` during their initial scan.
 
 | Action | Control |
 |---|---|
@@ -88,7 +91,7 @@ Opening an MZT first shows its record selector.
 | Play selected record | **PLAY** |
 | Return to browser | **STOP** |
 
-During MZT playback, **STOP** first returns to the MZT record selector. Press **STOP** again to return to the main browser.
+During container playback, **STOP** first returns to the record selector. Press **STOP** again to return to the main browser.
 
 ---
 
@@ -98,7 +101,7 @@ During MZT playback, **STOP** first returns to the MZT record selector. Press **
 |---|---|
 | **PLAY** | start / pause / resume |
 | **STOP** | stop / back |
-| **FFWD / REWIND** | select MZT record when the MZT selector is open |
+| **FFWD / REWIND** | select an MZT/MZQ/QDF/QD record when its selector is open |
 
 Common display states:
 

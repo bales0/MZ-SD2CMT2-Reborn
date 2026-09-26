@@ -294,7 +294,7 @@ static void build_play_line0(const play_controller_view_t *view, char *line0)
     memset(line0, ' ', 16U);
     line0[16] = '\0';
 
-    if (view->format == FILE_FORMAT_MZT)
+    if (file_format_is_record_container(view->format))
     {
         char prefix[13];
         int written = snprintf(prefix, sizeof(prefix), "%u%c%u ",
@@ -361,6 +361,21 @@ play_screen_action_t play_screen_handle_event(button_event_t event)
     }
 }
 
+void play_screen_show_qd_loading(uint8_t percent)
+{
+    char line0[17];
+    flash_text_snprintf(line0, sizeof(line0), PSTR("QD SCAN %3u%%"),
+                        (unsigned int)percent);
+    lcd_print_fixed(0U, line0);
+    lcd_print_fixed_P(1U, PSTR("STOP=CANCEL"));
+}
+
+void play_screen_show_qd_preparing(void)
+{
+    lcd_print_fixed_P(0U, PSTR("QD LOAD..."));
+    lcd_print_fixed_P(1U, PSTR("PLEASE WAIT"));
+}
+
 void play_screen_render(const play_controller_view_t *view)
 {
     char line0[17];
@@ -399,7 +414,8 @@ void play_screen_render(const play_controller_view_t *view)
     {
         flash_text_copy(line1, sizeof(line1), text_unsupported);
     }
-    else if ((view->format == FILE_FORMAT_MZT) && view->mzt_selection_pending)
+    else if (file_format_is_record_container(view->format) &&
+             view->mzt_selection_pending)
     {
         flash_text_copy(mode_label, sizeof(mode_label),
                         mzt_loader_label_P(view->mzt_record_loader_mode));

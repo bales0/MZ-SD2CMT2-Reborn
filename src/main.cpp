@@ -13,6 +13,7 @@
 #include "drivers/ram_monitor.h"
 
 #include "play/play_controller.h"
+#include "play/mzf_playback.h"
 #include "ui/browser.h"
 #include "ui/menu.h"
 #include "ui/record_menu.h"
@@ -41,6 +42,7 @@ static uint16_t last_lcd_update_ms = 0U;
 static uint16_t last_active_keypad_poll_ms = 0U;
 static bool sd_ok = false;
 static app_screen_t current_screen = APP_SCREEN_BROWSER;
+static bool qd_cancel_during_enter = false;
 
 /* Fixed root-level destination copied from flash only when RECORD starts. */
 static const char recordings_directory_P[] PROGMEM = "/RECORDINGS";
@@ -172,14 +174,39 @@ static void app_enter_browser(void)
     lcd_clear();
 }
 
+static void app_qd_analysis_progress(uint8_t percent)
+{
+    if (percent == MZF_QD_PROGRESS_LOADING)
+        play_screen_show_qd_preparing();
+    else
+        play_screen_show_qd_loading(percent);
+}
+
+static bool app_qd_analysis_cancel_requested(void)
+{
+    if (keypad_get_button() != BUTTON_LEFT) return false;
+    if (current_screen == APP_SCREEN_BROWSER) qd_cancel_during_enter = true;
+    keypad_ignore_until_release();
+    return true;
+}
+
 static void app_enter_play(const char *filename, const char *directory_path)
 {
     browser_save_position();
     browser_clear_status();
+    qd_cancel_during_enter = false;
+    if (file_format_detect_from_name(filename) == FILE_FORMAT_MZQ)
+        play_screen_show_qd_loading(0U);
     play_controller_start_session(filename, directory_path,
                                   menu_get_invert_signal(),
                                   menu_get_loader_mode(),
                                   menu_get_play_control_mode());
+    if (qd_cancel_during_enter)
+    {
+        play_controller_stop();
+        app_enter_browser();
+        return;
+    }
     current_screen = APP_SCREEN_PLAY;
     lcd_clear();
 }
@@ -332,6 +359,8 @@ void setup()
     menu_init();
     record_menu_init();
     play_controller_init();
+    mzf_playback_set_qd_analysis_callbacks(app_qd_analysis_progress,
+                                           app_qd_analysis_cancel_requested);
     record_engine_init();
     current_screen = APP_SCREEN_BROWSER;
     lcd_clear();

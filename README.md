@@ -21,7 +21,7 @@ The dedicated version remains based on the same core CMT interface, but adds con
 ## Main features
 
 - SD-card file browser with alphabetical sorting, folders and long-name scrolling
-- playback of **MZF, MZT, M12, WAV, LEP, L16 and TAP**
+- playback of **MZF, MZT, MZQ, QDF, QD, M12, WAV, LEP, L16 and TAP**
 - recording to **MZF, WAV, LEP and L16**
 - WAV recording at **44.1 kHz or 22.05 kHz, 8-bit mono**
 - recording control by **MOTOR**, automatic activity detection, or manual control
@@ -32,6 +32,7 @@ The dedicated version remains based on the same core CMT interface, but adds con
 - selectable ZX Spectrum **TAP playback speed**
 - **MFI metadata for MZF** and **MTI per-record metadata for MZT**
 - **MZT mini-browser / record selector** showing logical record number, title, loader/profile and per-record duration
+- read-only **MZQ/QDF/QD QuickDisk mini-browser** for selecting and playing an image entry as MZF tape data
 - independent loader/profile selection for every logical record inside an MZT
 - browser `I` indicator when matching MFI/MTI playback information is available
 - MFI/MTI files hidden from normal browser entry counts and sorting
@@ -64,6 +65,9 @@ Supported playback formats are:
 |---|---|
 | **MZF** | canonical single Sharp MZ program image |
 | **MZT** | container with multiple logical MZF records |
+| **MZQ** | Sharp QuickDisk image; contained files are selectable and played as tape records |
+| **QDF** | CRC-protected QuickDisk byte-stream image used by MZTools |
+| **QD** | content-detected logical, HxC or FlashFloppy Sharp QuickDisk image |
 | **M12** | supported Sharp tape-format variant |
 | **WAV** | sampled tape waveform |
 | **LEP** | pulse-duration representation using a 50 µs unit |
@@ -121,6 +125,16 @@ During playback, **STOP** returns first to the MZT selector. A second **STOP** r
 Each logical MZT record is treated independently. Its title, loader/profile and duration are recalculated for that record rather than applying one global setting to the whole MZT.
 
 Ultra Fast records are also treated as independent LOAD operations. After an Ultra Fast record completes, the next MZT record is not injected automatically: MOTOR mode waits for a new MOTOR cycle and MANUAL mode waits for a new PLAY confirmation.
+
+### MZQ/QDF/QD QuickDisk mini-browser
+
+Opening a Sharp `.MZQ`, `.QDF` or `.QD` QuickDisk image uses the same lightweight selector and controls as MZT. QDF and physical images are fully analysed and CRC-checked once; their compact 24-bit frame-position index is then retained for fast record changes in the shared CMT scratch workspace. `QD SCAN n% / STOP=CANCEL` is displayed during the initial scan. Both commonly encountered QuickDisk data-block identifiers (`01` and `05`) are accepted.
+
+QuickDisk variants are detected from their contents rather than their filename. Supported variants are MZQ/Sharp legacy logical images, QDF byte streams with the `-QD format-` signature, the `HXCQDDRV` physical container and the FlashFloppy physical container. Physical images are decoded directly from their MFM track with automatic bit-phase detection and CRC-16 validation; they are not expanded into RAM or a temporary SD-card file. Legacy logical images use their native `CRC` framing marker. Header/body order, declared sizes, container geometry and the QuickDisk limit of 50 imported files are validated before playback.
+
+The selected QuickDisk entry is converted in memory to a 128-byte MZF tape header and played through the CMT output. Playback stops after that entry and returns to the selector; it does not continue into the following QuickDisk file. QuickDisk access is read-only and does not emulate an MZ-1F11 drive or modify the image.
+
+MFI/MTI sidecars do not apply to MZQ/QDF/QD. `LOADER=AUTO` therefore falls back to `NORMAL 1:1`; a different compatible loader can be selected manually from the PLAY menu.
 
 ## MFI and MTI playback metadata
 
