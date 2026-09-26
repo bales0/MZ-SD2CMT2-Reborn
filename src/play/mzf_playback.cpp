@@ -630,6 +630,11 @@ static bool mzf_mzq_raw_byte(uint32_t relative_offset, uint8_t *value)
     uint32_t remaining;
     uint16_t request;
     int16_t received;
+    const bool use_scan_buffer = mzf_qd_analysis_active;
+    uint8_t *raw_buffer = use_scan_buffer ?
+        const_cast<uint8_t *>(wav_sample_stream_isr_bytes) : mzf_mzq_raw_buffer;
+    const uint16_t raw_buffer_bytes = use_scan_buffer ?
+        WAV_SAMPLE_STREAM_BUFFER_BYTES : MZQ_RAW_BUFFER_BYTES;
     if ((value == NULL) || (relative_offset >= mzf_mzq_track_length)) return false;
     if ((mzf_mzq_raw_buffer_length == 0U) ||
         (relative_offset < mzf_mzq_raw_buffer_offset) ||
@@ -639,33 +644,44 @@ static bool mzf_mzq_raw_byte(uint32_t relative_offset, uint8_t *value)
             return false;
         mzf_mzq_raw_buffer_offset = relative_offset;
         remaining = mzf_mzq_track_length - relative_offset;
-        request = (remaining > MZQ_RAW_BUFFER_BYTES) ?
-            MZQ_RAW_BUFFER_BYTES : (uint16_t)remaining;
+        request = (remaining > raw_buffer_bytes) ?
+            raw_buffer_bytes : (uint16_t)remaining;
         if (!sdcard_file_seek(mzf_mzq_track_offset + relative_offset)) return false;
-        received = sdcard_file_read(mzf_mzq_raw_buffer, request);
+        received = sdcard_file_read(raw_buffer, request);
         if (received != (int16_t)request) return false;
-        mzf_mzq_raw_buffer_length = (uint8_t)request;
+        mzf_mzq_raw_buffer_length = request;
     }
-    *value = mzf_mzq_raw_buffer[relative_offset - mzf_mzq_raw_buffer_offset];
+    *value = raw_buffer[relative_offset - mzf_mzq_raw_buffer_offset];
     return true;
 }
 
 static bool mzf_mzq_decode_byte(uint32_t logical_index, uint8_t *value)
 {
-    uint32_t first_bit;
-    uint8_t decoded = 0U;
+    uint32_t first_bit, raw_offset, raw_bits;
+    uint16_t spread_bits;
+    uint8_t raw, bit_shift;
     if (value == NULL) return false;
     first_bit = (uint32_t)mzf_mzq_data_phase + logical_index * 16UL;
     if ((first_bit + 14UL) >= (mzf_mzq_track_length * 8UL)) return false;
-    for (uint8_t bit = 0U; bit < 8U; ++bit)
+    raw_offset = first_bit >> 3U;
+    bit_shift = (uint8_t)(first_bit & 7UL);
+    if (!mzf_mzq_raw_byte(raw_offset, &raw)) return false;
+    raw_bits = raw;
+    if (!mzf_mzq_raw_byte(raw_offset + 1UL, &raw)) return false;
+    raw_bits |= (uint32_t)raw << 8U;
+    if (bit_shift >= 2U)
     {
-        uint32_t position = first_bit + (uint32_t)bit * 2UL;
-        uint8_t raw;
-        if (!mzf_mzq_raw_byte(position >> 3U, &raw)) return false;
-        if ((raw & (uint8_t)(1U << (position & 7U))) != 0U)
-            decoded |= (uint8_t)(1U << bit);
+        if (!mzf_mzq_raw_byte(raw_offset + 2UL, &raw)) return false;
+        raw_bits |= (uint32_t)raw << 16U;
     }
-    *value = decoded;
+
+    /* MFM data bits occupy every other cell. Compact the 16-cell window
+       into one byte instead of fetching and testing all eight bits alone. */
+    spread_bits = (uint16_t)(raw_bits >> bit_shift) & 0x5555U;
+    spread_bits = (uint16_t)((spread_bits | (spread_bits >> 1U)) & 0x3333U);
+    spread_bits = (uint16_t)((spread_bits | (spread_bits >> 2U)) & 0x0F0FU);
+    spread_bits = (uint16_t)((spread_bits | (spread_bits >> 4U)) & 0x00FFU);
+    *value = (uint8_t)spread_bits;
     return true;
 }
 
@@ -811,9 +827,9 @@ static bool mzf_read_header_record(void)
 
 static uint8_t mzf_popcount8(uint8_t value)
 {
-    uint8_t count = 0U;
-    while (value != 0U) { count = (uint8_t)(count + (value & 1U)); value >>= 1U; }
-    return count;
+    value = (uint8_t)(value - ((value >> 1U) & 0x55U));
+    value = (uint8_t)((value & 0x33U) + ((value >> 2U) & 0x33U));
+    return (uint8_t)((value + (value >> 4U)) & 0x0FU);
 }
 
 static uint8_t mzf_popcount16(uint16_t value)
@@ -2008,9 +2024,13 @@ static bool mzf_mzq_read_physical_frame(uint8_t expected_type,
         uint8_t ones;
         if (!mzf_mzq_scan_read(&value)) return false;
         if ((payload != NULL) && (index < MZQ_HEADER_BYTES)) payload[index] = value;
-        ones = mzf_popcount8(value);
-        if (one_count != NULL) *one_count += (uint32_t)ones;
-        if (checksum != NULL) *checksum = (uint16_t)(*checksum + (uint16_t)ones);
+        if ((one_count != NULL) || (checksum != NULL))
+        {
+            ones = mzf_popcount8(value);
+            if (one_count != NULL) *one_count += (uint32_t)ones;
+            if (checksum != NULL)
+                *checksum = (uint16_t)(*checksum + (uint16_t)ones);
+        }
         crc = mzf_mzq_crc_byte(crc, value);
     }
     for (uint8_t index = 0U; index < 2U; ++index)
