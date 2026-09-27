@@ -1,7 +1,7 @@
 # MZ-SD2CMT2 - Reborn
 
 **Extended SD-card CMT emulator / recorder for the Sharp MZ-800**  
-**Firmware 1.0**
+**Firmware 2.0**
 
 <p align="center">
   <img src="images/mzsd2cmt2_case_top.png" alt="MZ-SD2CMT2 enclosure" width="720">
@@ -36,7 +36,7 @@ The dedicated version remains based on the same core CMT interface, but adds con
 - independent loader/profile selection for every logical record inside an MZT
 - browser `I` indicator when matching MFI/MTI playback information is available
 - MFI/MTI files hidden from normal browser entry counts and sorting
-- preparation and conversion of **MZF, MZT, LEP, L16 and WAV** files, including matching **MFI/MTI** metadata is possible with [Extended QDTool](https://github.com/bales0/QDTool)
+- preparation and conversion of **MZF, MZT, LEP, L16 and WAV** files, including matching **MFI/MTI** metadata, is possible with [MZTools](https://github.com/bales0/MZTools)
 - automatic sound-monitor activity during physical tape waveform playback/recording
 - persistent hardware, playback and recording settings stored in EEPROM
 - SD-card insertion/removal handling on supported dedicated hardware
@@ -223,9 +223,9 @@ when matching playback information exists for the highlighted MZF/MZT.
 
 For MZT, the same `I` convention is also used in the logical record counter when MTI information is available.
 
-## Preparing files with Extended QDTool
+## Preparing files with MZTools
 
-The companion [**Extended QDTool**](https://github.com/bales0/QDTool) can be used on a PC to prepare files for MZ-SD2CMT2.
+The companion [**MZTools**](https://github.com/bales0/MZTools) application can be used on a PC to prepare files for MZ-SD2CMT2.
 
 In its Advanced mode it can:
 
@@ -237,14 +237,14 @@ In its Advanced mode it can:
 - combine several records into one waveform output or export them separately
 - import supported WAV/LEP/L16 tape captures and map recognized NORMAL, MZ700, IC and TC timing profiles back to record metadata
 
-This makes Extended QDTool the recommended desktop utility for preparing an SD-card library when files need to be converted, grouped into MZT containers, assigned a specific playback profile, or supplied together with MFI/MTI information for `LOADER=AUTO`.
+This makes MZTools the recommended desktop utility for preparing an SD-card library when files need to be converted, grouped into MZT containers, assigned a specific playback profile, or supplied together with MFI/MTI information for `LOADER=AUTO`.
 
 Typical workflow:
 
 ```text
 MZF files
    |
-   +--> assign Loader / Speed in Extended QDTool
+   +--> assign Loader / Speed in MZTools
    |
    +--> save as MZF + MFI
    |
@@ -253,7 +253,7 @@ MZF files
    +--> or export as LEP / L16 / WAV
 ```
 
-The waveform exporters use the selected record profiles. Static waveform export supports the NORMAL, MZ700, IC and TC families implemented by QDTool; Ultra Fast profiles require the live CMT handshake and therefore are not exported as a static LEP/L16/WAV waveform.
+The waveform exporters use the selected record profiles. Static waveform export supports the NORMAL, MZ700, IC and TC families implemented by MZTools; Ultra Fast profiles require the live CMT handshake and therefore are not exported as a static LEP/L16/WAV waveform.
 
 ## Recording overview
 
@@ -441,7 +441,7 @@ The source tree is divided into functional areas including:
 - `src/record` - WAV/LEP/L16/MZF recording and automatic naming
 - `src/formats` - file-format detection, tape profiles and MFI/MTI sidecar handling
 - `src/drivers` - LCD, keypad, SD card, CMT I/O, external-CMT switching and sound monitor
-- `src/ui` - browser, MZT record selector, menus and transport screens
+- `src/ui` - browser, MZT/QuickDisk record selector, menus and transport screens
 
 The internal sidecar implementation is still named `mzi_sidecar.*` for source compatibility, but the supported external metadata files are `.MFI` and `.MTI`.
 
@@ -471,7 +471,7 @@ Special thanks to the original authors, maintainers and contributors. MZ-SD2CMT2
 
 ## Development status
 
-Firmware 1.0 documents the current user-facing playback, MZT selection, MFI/MTI metadata and recording workflow described above. Timing profiles and hardware options continue to be tested on real Sharp MZ hardware.
+Firmware 2.0 adds read-only MZQ/QDF/QD QuickDisk image browsing and playback, faster physical-image decoding, corrected REWIND/FFWD navigation and more reliable manual SD-card retry. Timing profiles and hardware options continue to be tested on real Sharp MZ hardware.
 
 ## License
 

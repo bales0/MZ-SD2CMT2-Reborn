@@ -2,7 +2,7 @@
 ## User Handbook
 
 **Extended SD-card CMT emulator / recorder for Sharp MZ computers**  
-**Handbook draft for firmware 1.0**
+**Handbook draft for firmware 2.0**
 
 > **Draft status**
 >
@@ -29,7 +29,7 @@
 9. [PLAY settings](#9-play-settings)
 10. [Loader modes and speed profiles](#10-loader-modes-and-speed-profiles)
 11. [MFI and MTI metadata](#11-mfi-and-mti-metadata)
-12. [MZT multi-record tapes](#12-mzt-multi-record-tapes)
+12. [MZT multi-record tapes and QuickDisk images](#12-mzt-multi-record-tapes-and-quickdisk-images)
 13. [Recording](#13-recording)
 14. [AutoName and automatic profile detection](#14-autoname-and-automatic-profile-detection)
 15. [Understanding the buffer indicator](#15-understanding-the-buffer-indicator)
@@ -87,6 +87,7 @@ The firmware supports:
 
 - direct playback of **MZF**
 - multi-record **MZT**
+- read-only browsing and playback of **MZQ, QDF and QD QuickDisk images**
 - **M12**
 - waveform playback from **WAV**
 - pulse/edge formats **LEP** and **L16**
@@ -222,9 +223,9 @@ The exact action depends on the current screen.
 | Button | Action |
 |---|---|
 | PLAY | start / pause / resume |
-| STOP | stop and return; in MZT, first returns to the MZT record selector |
-| REWIND | previous MZT record while the MZT selector is active |
-| FFWD | next MZT record while the MZT selector is active |
+| STOP | stop and return; in a container, first returns to its record selector |
+| REWIND | previous record while an MZT/QuickDisk selector is active |
+| FFWD | next record while an MZT/QuickDisk selector is active |
 
 ## 4.3 RECORD screen
 
@@ -576,7 +577,7 @@ These abbreviations are intended mainly as diagnostics. A normal user does not n
 
 ---
 
-## 5.10 MZT selector display
+## 5.10 MZT and QuickDisk selector display
 
 Opening an MZT does **not** immediately begin record 1. It first opens a small record selector.
 
@@ -607,6 +608,10 @@ Meaning:
 ```
 
 `I` and `MTI` confirm that the record has been resolved using the `.MTI` sidecar.
+
+MZQ/QDF/QD images use the same selector layout. Their entries do not use
+MFI/MTI metadata, so the second line shows the manually selected profile or the
+`NORMAL 1:1` fallback used by `LOADER=AUTO`.
 
 ### Manually forced loader
 
@@ -922,7 +927,7 @@ INSERT CARD
 
 is shown.
 
-During active PLAY, media removal aborts the stream safely. Reinserting the card causes reinitialization; MZT attempts to return to the previously prepared record selector, while a normal file is prepared again rather than blindly resumed from a stale buffer.
+During active PLAY, media removal aborts the stream safely. Reinserting the card causes reinitialization; MZT and QuickDisk containers attempt to return to the previously prepared record selector, while a normal file is prepared again rather than blindly resumed from a stale buffer.
 
 ---
 
@@ -932,6 +937,9 @@ During active PLAY, media removal aborts the stream safely. Reinserting the card
 |---|---:|---:|---|
 | **MZF** | yes | yes | canonical Sharp MZ single-file image |
 | **MZT** | yes | no | container with multiple logical MZF records |
+| **MZQ** | yes | no | Sharp legacy logical QuickDisk image |
+| **QDF** | yes | no | CRC-protected QuickDisk byte-stream image |
+| **QD** | yes | no | content-detected logical, HxC or FlashFloppy QuickDisk image |
 | **M12** | yes | no | Sharp tape-format variant supported by playback |
 | **WAV** | yes | yes | sampled physical tape waveform |
 | **LEP** | yes | yes | compact pulse-duration representation, 50 µs unit |
@@ -956,7 +964,21 @@ A virtual multi-record tape.
 
 An MZT may contain several logical MZF records. MZ-SD2CMT2 presents them through a mini-browser and can apply a different MTI loader profile to each record.
 
-## 7.3 WAV
+## 7.3 MZQ, QDF and QD QuickDisk images
+
+These extensions all open the read-only QuickDisk mini-browser, but the actual
+variant is detected from the file contents:
+
+- MZQ / Sharp legacy logical images;
+- QDF byte streams with the `-QD format-` signature;
+- HxC physical QuickDisk containers;
+- FlashFloppy physical QuickDisk containers.
+
+Each selected QuickDisk file is converted in memory to an MZF-style tape record.
+The source image is never modified and the firmware does not emulate an MZ-1F11
+drive.
+
+## 7.4 WAV
 
 Stores a sampled representation of the tape signal.
 
@@ -980,19 +1002,19 @@ MZ-SD2CMT2 records mono WAV at either:
 
 This limitation should be considered a design boundary, not an SD-card formatting problem.
 
-## 7.4 LEP
+## 7.5 LEP
 
 Pulse-duration format using a 50 µs unit.
 
 Good when a pulse representation is preferred over a sampled WAV while retaining physical tape timing.
 
-## 7.5 L16
+## 7.6 L16
 
 Pulse-duration format using a 16 µs unit.
 
 L16 provides finer timing resolution than LEP and is a useful archival/intermediate format for fast or timing-sensitive tape signals.
 
-## 7.6 TAP
+## 7.7 TAP
 
 ZX Spectrum TAP playback is supported with selectable bit rates:
 
@@ -1916,11 +1938,11 @@ For MZT:
 6. set PLAY `LOADER=AUTO`;
 7. verify `MTI` in the selector for the resolved records.
 
-A good MTI can therefore turn a complex multi-part tape into a file the user can simply select and use, without remembering a loader table.
+A good MTI can therefore turn a complex multi-part tape into a file the user can simply select and use, without remembering a loader table. [MZTools](https://github.com/bales0/MZTools) can prepare MZF/MZT files, create matching MFI/MTI sidecars and export LEP/L16/WAV waveforms on a PC.
 
 ---
 
-# 12. MZT multi-record tapes
+# 12. MZT multi-record tapes and QuickDisk images
 
 MZT is treated as a virtual tape containing multiple logical MZF records.
 
@@ -2130,6 +2152,39 @@ It cannot know that:
 The program running on the Sharp still determines **when another LOAD is requested**.
 
 MZ-SD2CMT2 supplies the correct virtual-tape record and playback profile; it does not replace the game's own loading logic.
+
+---
+
+## 12.9 MZQ/QDF/QD QuickDisk images
+
+Selecting an `.MZQ`, `.QDF` or `.QD` file opens the same lightweight record
+selector used for MZT. Use REWIND and FFWD to choose an entry, PLAY to start it
+and STOP to return to the main SD-card browser.
+
+For QDF, HxC and FlashFloppy images, the first open performs a complete scan:
+
+```text
+QD SCAN  42%
+STOP=CANCEL
+```
+
+Press STOP if you want to cancel the scan. The firmware detects the physical
+MFM bit phase, validates frame CRC-16 values and keeps a compact record index in
+RAM, so moving between entries after the initial analysis is faster. Up to 50
+files are imported from one image. Both commonly encountered data-block IDs,
+`01` and `05`, are accepted.
+
+The selected entry is converted in memory to a 128-byte MZF tape header and sent
+through the normal CMT output. When that entry finishes, playback returns to the
+selector rather than continuing into the next QuickDisk file.
+
+QuickDisk support has these deliberate limits:
+
+- images are read-only and are never modified;
+- it is file playback through CMT, not MZ-1F11 drive emulation;
+- MFI and MTI sidecars do not apply;
+- `LOADER=AUTO` falls back to `NORMAL 1:1`; select another compatible loader
+  manually in PLAY settings if required.
 
 ---
 
@@ -2731,7 +2786,7 @@ Example:
 
 ```text
 +----------------+
-|ABOUT v1.0      |
+|ABOUT v2.0      |
 |RAM 3120 MIN2870|
 +----------------+
 ```
@@ -2766,6 +2821,10 @@ PLAY   -> SELECT
 ## 17.1 Automatic calibration
 
 If no valid calibration is stored, startup enters the calibration sequence.
+
+Firmware 2.0 corrects the physical REWIND/FFWD mapping. Calibration data saved
+by firmware 1.x is intentionally treated as obsolete, so the first 2.0 startup
+may request one new calibration cycle.
 
 Example:
 
@@ -2972,6 +3031,9 @@ If the error persists:
 - try another SD card;
 - check FAT formatting and wiring;
 - on modular hardware verify the SD module is 5 V compatible and has proper level shifting.
+
+The retry performs a fresh card and filesystem initialization, so reseating or
+replacing the card before pressing RECORD does not require a full power cycle.
 
 ---
 
@@ -3311,6 +3373,10 @@ Canonical single Sharp MZ program/tape image.
 ### MZT
 Container holding multiple logical MZF records.
 
+### MZQ / QDF / QD
+Read-only Sharp QuickDisk image variants. Their files are selected in a
+mini-browser and played as MZF-style records through the CMT interface.
+
 ### MTI
 **MZT Information** sidecar containing per-record playback metadata for an MZT. Each 1-based `RECORD=n` section can select its own loader/profile, which is especially useful for multi-part games.
 
@@ -3364,7 +3430,9 @@ Pause caused by the Sharp MOTOR signal.
 
 # Revision note – sidecars and multi-part software
 
-This revision expands the explanation of loader abbreviations and documents the intended use of MFI/MTI sidecars for single MZF files, MZT records and multi-part games.
+This revision documents firmware 2.0 QuickDisk image playback, corrected
+REWIND/FFWD navigation, fresh SD-card retry behaviour and the use of MZTools for
+preparing files and metadata.
 
 
 # Documentation notes for the next revision

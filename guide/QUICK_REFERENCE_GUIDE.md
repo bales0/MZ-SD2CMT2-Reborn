@@ -1,7 +1,7 @@
 # MZ-SD2CMT2 – Reborn
 ## Quick Reference Guide
 
-**Firmware 1.0**
+**Firmware 2.0**
 
 This guide contains the basic controls and everyday operating steps only.
 
@@ -83,6 +83,8 @@ Opening an MZT, MZQ, QDF or QD first shows its record selector. A QuickDisk entr
 played as one MZF-style tape record; the image itself remains read-only. QD
 format selection is automatic for logical QDF/MZQ, HxC and FlashFloppy images.
 QDF and physical images show `QD SCAN n% / STOP=CANCEL` during their initial scan.
+Press **STOP** to cancel the scan and return to the SD-card browser. Up to 50
+files can be imported from one QuickDisk image.
 
 | Action | Control |
 |---|---|
@@ -92,6 +94,9 @@ QDF and physical images show `QD SCAN n% / STOP=CANCEL` during their initial sca
 | Return to browser | **STOP** |
 
 During container playback, **STOP** first returns to the record selector. Press **STOP** again to return to the main browser.
+
+QuickDisk images are read-only. MFI/MTI sidecars do not apply to them; with
+`LOADER=AUTO`, playback uses the safe `NORMAL 1:1` fallback.
 
 ---
 
@@ -252,7 +257,14 @@ PLAY          = change / confirm
 STOP          = return
 ```
 
-The ABOUT screen shows firmware version 1.0.
+The ABOUT screen shows firmware version 2.0.
+
+---
+
+## Preparing files on a PC
+
+[MZTools](https://github.com/bales0/MZTools) can prepare and convert MZF/MZT
+files, generate MFI/MTI metadata and export LEP/L16/WAV waveforms.
 
 ---
 

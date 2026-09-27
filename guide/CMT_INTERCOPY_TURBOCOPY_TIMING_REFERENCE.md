@@ -1,6 +1,6 @@
 # Sharp MZ CMT — Intercopy 10.2 & TurboCopy 1.22 Timing Reference
 
-**Účel:** zdrojová reference pro stanovení časových konstant v **QDTool/QDTools** a **MZ-SD2CMT2**.
+**Účel:** zdrojová reference pro stanovení časových konstant v **MZTools** a **MZ-SD2CMT2**.
 
 **Datum analýzy:** 2026-09-14
 
@@ -472,7 +472,7 @@ Nejsou to:
 COPIER-WRITER-EXACT Intercopy waveform
 ```
 
-Proto se v QDTool ani SD2CMT2 nesmí jedna tabulka automaticky používat pro:
+Proto se v MZTools ani SD2CMT2 nesmí jedna tabulka automaticky používat pro:
 
 ```text
 NORMAL 3200 exact
@@ -513,7 +513,7 @@ Změna jedné vrstvy nesmí automaticky měnit druhou.
 
 ---
 
-# 10. QDTool WAV — důsledek sample rate
+# 10. MZTools WAV — důsledek sample rate
 
 Při 44.1 kHz má jeden sample:
 
@@ -541,7 +541,7 @@ Proto pro waveform-fidelity export:
 
 je výrazně vhodnější než 44.1 kHz.
 
-Pokud QDTool zůstane na 44.1 kHz, musí používat průběžný fractional/error accumulator; jednotlivé pulsy budou stále výrazně kvantizované.
+Pokud MZTools zůstane na 44.1 kHz, musí používat průběžný fractional/error accumulator; jednotlivé pulsy budou stále výrazně kvantizované.
 
 ---
 
@@ -962,7 +962,7 @@ stejně jako analyzovaná TC family.
 
 Pulse timing nesmí měnit leader counts.
 
-Pro QDTool/SD2CMT2 používat `LEADER_PULSES_UNIFICATION` jako projektovou politiku.
+Pro MZTools/SD2CMT2 používat `LEADER_PULSES_UNIFICATION` jako projektovou politiku.
 
 Kanonicky:
 
@@ -997,9 +997,9 @@ Tato politika nesmí být zaměněna za pulse-width analýzu tohoto dokumentu.
 
 ---
 
-# 22. Doporučené constants model pro QDTool
+# 22. Doporučené constants model pro MZTools
 
-QDTool by měl rozlišit minimálně:
+MZTools by měl rozlišit minimálně:
 
 ```text
 HistoricalWriterProfile
@@ -1175,7 +1175,7 @@ Rychlejší waveform nesmí automaticky měnit počet leader pulzů.
 
 # 26. Doporučení pro další implementaci
 
-## QDTool
+## MZTools
 
 1. Opravit NORMAL 1:4 tak, aby nebyl kopií IC 1:4 compatibility timing.
 2. Pokud názvy 1:3/1:4 reprezentují Intercopy slots:
@@ -1310,7 +1310,7 @@ framing_policy:
 
 # 28. Finální rozhodovací pravidlo
 
-Při nastavování nové konstanty v QDTool nebo SD2CMT2 se nejdřív musí odpovědět:
+Při nastavování nové konstanty v MZTools nebo SD2CMT2 se nejdřív musí odpovědět:
 
 ```text
 Chci:
