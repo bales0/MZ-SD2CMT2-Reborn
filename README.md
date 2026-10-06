@@ -136,6 +136,10 @@ The selected QuickDisk entry is converted in memory to a 128-byte MZF tape heade
 
 MFI/MTI sidecars do not apply to MZQ/QDF/QD. `LOADER=AUTO` therefore falls back to `NORMAL 1:1`; a different compatible loader can be selected manually from the PLAY menu.
 
+Logical MZQ and legacy QD records use the existing MZF loader checks and support manual NORMAL 1:1/1:2/1:3/1:4, MZ700 1:1/1:3, IC 1:1/1:2/1:3/1:4, TC 1:1/1:2/1:3, UL, UL_MZ800 and UL_MZ700. An incompatible manual fast loader falls back to NORMAL 1:1 for that record, shown as `N11` in the selector; browsing stays available and another compatible record still uses the requested loader. Record lookup and synthetic header construction happen before transfer; logical UL reads the selected contiguous payload in ordinary SD blocks, with source seeks and reads bounded to that payload. CRC markers, later records and the formatting tail are excluded.
+
+For physical HxC/FlashFloppy images, NORMAL and AUTO fill the playback FIFO immediately when a record is selected, so the buffer indicator is already full in the mini-browser. Selection decodes only enough payload to fill the shared FIFO; the whole-body duration calculation remains deferred until PLAY. Starting playback preserves the prepared FIFO and resumes source reads after its bytes. Physical images use the same NORMAL 1:1 fallback for incompatible fast loaders. Physical image playback and its existing loader path remain available for hardware trials; host tests do not establish real Mega2560 MFM throughput or Sharp CMT handshake reliability. See [QuickDisk verification](verification/README.md) for coverage and hardware checks.
+
 ## MFI and MTI playback metadata
 
 External playback metadata use two explicit sidecar formats:

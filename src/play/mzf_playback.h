@@ -40,7 +40,7 @@ typedef void (*mzf_qd_analysis_progress_callback_t)(uint8_t percent);
 typedef bool (*mzf_qd_analysis_cancel_callback_t)(void);
 
 /* Progress callbacks receive this value while a selected physical QD record
-   is being decoded into the playback FIFO. Percent values remain 0..100. */
+   is scanned for duration before playback. Percent values remain 0..100. */
 #define MZF_QD_PROGRESS_LOADING 0xFFU
 
 /* Streams Sharp tape images with native framing and selected loader timing.

@@ -261,7 +261,7 @@ static bool mzf_qd_load_active = false;
 static bool mzf_qd_load_cancelled = false;
 static uint8_t mzf_qd_last_progress = 0xFFU;
 static bool mzf_tape_turbo_payload_prepared = false;
-static bool mzf_mzq_prefill_deferred = false;
+static bool mzf_mzq_duration_deferred = false;
 static uint32_t mzf_total_duration_ms = 0UL;
 static uint32_t mzf_exact_duration_half_ms = 0UL;
 
@@ -293,10 +293,17 @@ static uint16_t mzf_boundary_auto_start_ms = 0U;
 static bool mzf_fast3_start_delay_armed = false;
 static uint16_t mzf_fast3_start_delay_started_ms = 0U;
 
+static void mzf_stop_timer_from_foreground(bool force_low);
+
 static void mzf_set_error_P(PGM_P text, mzf_playback_state_t state)
 {
     flash_text_copy(mzf_error_text, sizeof(mzf_error_text), text);
     mzf_state = (uint8_t)state;
+    if (mzf_format == FILE_FORMAT_MZQ)
+    {
+        mzf_stop_timer_from_foreground(true);
+        mz_sense_set(true);
+    }
 }
 
 static void mzf_set_error(const char *text, mzf_playback_state_t state)
@@ -308,6 +315,11 @@ static void mzf_set_error(const char *text, mzf_playback_state_t state)
         mzf_error_text[sizeof(mzf_error_text) - 1U] = '\0';
     }
     mzf_state = (uint8_t)state;
+    if (mzf_format == FILE_FORMAT_MZQ)
+    {
+        mzf_stop_timer_from_foreground(true);
+        mz_sense_set(true);
+    }
 }
 
 static void mzf_set_error_from_isr_P(PGM_P text, mzf_playback_state_t state)
@@ -687,7 +699,14 @@ static bool mzf_mzq_decode_byte(uint32_t logical_index, uint8_t *value)
 
 static bool mzf_record_source_seek(uint32_t position)
 {
-    if (!mzf_mzq_physical_source) return sdcard_file_seek(position);
+    if (!mzf_mzq_physical_source)
+    {
+        if ((mzf_format == FILE_FORMAT_MZQ) &&
+            ((position < mzf_original_data_offset) ||
+             ((position - mzf_original_data_offset) > mzf_original_data_length)))
+            return false;
+        return sdcard_file_seek(position);
+    }
     if (position > mzf_original_data_length) return false;
     mzf_mzq_source_position = position;
     mzf_mzq_raw_buffer_length = 0U;
@@ -698,7 +717,21 @@ static int16_t mzf_record_source_read(void *buffer, uint16_t size)
 {
     uint8_t *bytes = (uint8_t *)buffer;
     uint16_t count = 0U;
-    if (!mzf_mzq_physical_source) return sdcard_file_read(buffer, size);
+    if (!mzf_mzq_physical_source)
+    {
+        if (mzf_format == FILE_FORMAT_MZQ)
+        {
+            const uint32_t position = sdcard_file_position();
+            if ((position < mzf_original_data_offset) ||
+                ((position - mzf_original_data_offset) > mzf_original_data_length))
+                return -1;
+            const uint32_t remaining = mzf_original_data_length -
+                                       (position - mzf_original_data_offset);
+            if (remaining == 0UL) return 0;
+            if ((uint32_t)size > remaining) size = (uint16_t)remaining;
+        }
+        return sdcard_file_read(buffer, size);
+    }
     while ((count < size) && (mzf_mzq_source_position < mzf_original_data_length))
     {
         if (!mzf_mzq_decode_byte(mzf_mzq_body_logical_offset +
@@ -1832,13 +1865,31 @@ static bool mzf_locate_mzt_record(uint16_t wanted_record)
    00 16 16 A5 followed by its block payload and a three-byte CRC trailer.
    Searching instead of assuming one fixed gap byte also accepts images made
    from real media with longer inter-block gaps. */
+static bool mzf_mzq_read_logical(void *buffer, uint16_t size, PGM_P short_error)
+{
+    int16_t received = sdcard_file_read(buffer, size);
+    if (received == (int16_t)size) return true;
+    mzf_set_error_P((received < 0) ? PSTR("QD READ") : short_error,
+                    (received < 0) ? MZF_PLAYBACK_IO_ERROR : MZF_PLAYBACK_BAD_FILE);
+    return false;
+}
+
 static bool mzf_mzq_find_frame(void)
 {
     uint8_t matched = 0U;
     uint8_t value;
     while (sdcard_file_position() < mzf_file_size)
     {
-        if (sdcard_file_read(&value, 1U) != 1) return false;
+        /* A damaged declared record may make the gap search reach the tail.
+           Poll STOP without adding work to the selected payload data path. */
+        if (((sdcard_file_position() & 0x1FFUL) == 0UL) &&
+            (mzf_qd_cancel_callback != NULL) && mzf_qd_cancel_callback())
+        {
+            mzf_qd_analysis_cancelled = true;
+            mzf_set_error_P(PSTR("QD CANCEL"), MZF_PLAYBACK_BAD_FILE);
+            return false;
+        }
+        if (!mzf_mzq_read_logical(&value, 1U, PSTR("QD SHORT HDR"))) return false;
         switch (matched)
         {
             case 0U: matched = (value == 0x00U) ? 1U : 0U; break;
@@ -1856,6 +1907,7 @@ static bool mzf_mzq_find_frame(void)
                 break;
         }
     }
+    mzf_set_error_P(PSTR("QD SHORT HDR"), MZF_PLAYBACK_BAD_FILE);
     return false;
 }
 
@@ -2439,41 +2491,50 @@ static bool mzf_locate_logical_mzq_record(uint16_t wanted_record)
     bool found = false;
 
     if (wanted_record == 0U) wanted_record = 1U;
-    if (!sdcard_file_seek(0UL) ||
-        (sdcard_file_read(prefix, sizeof(prefix)) != (int16_t)sizeof(prefix)) ||
-        (prefix[0] != 0x00U) || (prefix[1] != 0x16U) ||
+    if (!sdcard_file_seek(0UL))
+    { mzf_set_error_P(PSTR("QD SEEK"), MZF_PLAYBACK_IO_ERROR); return false; }
+    int16_t received = sdcard_file_read(prefix, sizeof(prefix));
+    if (received != (int16_t)sizeof(prefix))
+    {
+        mzf_set_error_P((received < 0) ? PSTR("QD READ") : PSTR("QD SHORT HDR"),
+                        (received < 0) ? MZF_PLAYBACK_IO_ERROR : MZF_PLAYBACK_BAD_FILE);
+        return false;
+    }
+    if ((prefix[0] != 0x00U) || (prefix[1] != 0x16U) ||
         (prefix[2] != 0x16U) || (prefix[3] != 0xA5U) ||
         (prefix[5] != 'C') || (prefix[6] != 'R') || (prefix[7] != 'C'))
     { mzf_set_error_P(PSTR("MZQ HEADER"), MZF_PLAYBACK_BAD_FILE); return false; }
     block_count = prefix[4];
-    if ((block_count == 0U) || ((block_count & 1U) != 0U))
+    if (block_count == 0U)
     { mzf_set_error_P(PSTR("MZQ EMPTY"), MZF_PLAYBACK_BAD_FILE); return false; }
-    if (block_count > (MZQ_MAX_FILES * 2U))
+    if (((block_count & 1U) != 0U) || (block_count > (MZQ_MAX_FILES * 2U)))
     { mzf_set_error_P(PSTR("MZQ COUNT"), MZF_PLAYBACK_BAD_FILE); return false; }
 
     record_count = (uint16_t)(block_count / 2U);
+    if (wanted_record > record_count)
+    { mzf_set_error_P(PSTR("MZQ RECORD"), MZF_PLAYBACK_BAD_FILE); return false; }
     for (uint16_t record = 1U; record <= record_count; ++record)
     {
         uint16_t body_length;
         uint32_t body_offset;
 
         if (!mzf_mzq_find_frame() ||
-            (sdcard_file_read(block_header, sizeof(block_header)) !=
-             (int16_t)sizeof(block_header)) ||
-            (block_header[0] != 0x00U) ||
+            !mzf_mzq_read_logical(block_header, sizeof(block_header), PSTR("QD SHORT HDR")))
+            return false;
+        if ((block_header[0] != 0x00U) ||
             (block_header[1] != MZQ_HEADER_BYTES) ||
-            (block_header[2] != 0x00U) ||
-            (sdcard_file_read(qd_header, sizeof(qd_header)) !=
-             (int16_t)sizeof(qd_header)) ||
-            (sdcard_file_read(trailer, sizeof(trailer)) !=
-             (int16_t)sizeof(trailer)) ||
-            (trailer[0] != 'C') || (trailer[1] != 'R') || (trailer[2] != 'C'))
+            (block_header[2] != 0x00U))
         { mzf_set_error_P(PSTR("MZQ FILE HDR"), MZF_PLAYBACK_BAD_FILE); return false; }
+        if (!mzf_mzq_read_logical(qd_header, sizeof(qd_header), PSTR("QD SHORT HDR")) ||
+            !mzf_mzq_read_logical(trailer, sizeof(trailer), PSTR("QD SHORT HDR")))
+            return false;
+        if ((trailer[0] != 'C') || (trailer[1] != 'R') || (trailer[2] != 'C'))
+        { mzf_set_error_P(PSTR("QD HEADER CRC"), MZF_PLAYBACK_BAD_FILE); return false; }
 
         if (!mzf_mzq_find_frame() ||
-            (sdcard_file_read(block_header, sizeof(block_header)) !=
-             (int16_t)sizeof(block_header)) ||
-            ((block_header[0] != 0x01U) && (block_header[0] != 0x05U)))
+            !mzf_mzq_read_logical(block_header, sizeof(block_header), PSTR("QD SHORT BODY")))
+            return false;
+        if ((block_header[0] != 0x01U) && (block_header[0] != 0x05U))
         { mzf_set_error_P(PSTR("MZQ DATA HDR"), MZF_PLAYBACK_BAD_FILE); return false; }
 
         body_length = (uint16_t)block_header[1] |
@@ -2482,9 +2543,9 @@ static bool mzf_locate_logical_mzq_record(uint16_t wanted_record)
         if (((uint16_t)qd_header[20] | ((uint16_t)qd_header[21] << 8U)) !=
             body_length)
         { mzf_set_error_P(PSTR("MZQ SIZE"), MZF_PLAYBACK_BAD_FILE); return false; }
-        if (((uint32_t)body_length > (mzf_file_size - body_offset)) ||
+        if ((body_offset > mzf_file_size) ||
             ((mzf_file_size - body_offset) < ((uint32_t)body_length + 3UL)))
-        { mzf_set_error_P(PSTR("MZQ LENGTH"), MZF_PLAYBACK_BAD_FILE); return false; }
+        { mzf_set_error_P(PSTR("QD SHORT BODY"), MZF_PLAYBACK_BAD_FILE); return false; }
 
         if (record == wanted_record)
         {
@@ -2494,11 +2555,14 @@ static bool mzf_locate_logical_mzq_record(uint16_t wanted_record)
             found = true;
         }
 
-        if (!sdcard_file_seek(body_offset + (uint32_t)body_length) ||
-            (sdcard_file_read(trailer, sizeof(trailer)) !=
-             (int16_t)sizeof(trailer)) ||
-            (trailer[0] != 'C') || (trailer[1] != 'R') || (trailer[2] != 'C'))
+        if (!sdcard_file_seek(body_offset + (uint32_t)body_length))
         { mzf_set_error_P(PSTR("MZQ SEEK"), MZF_PLAYBACK_IO_ERROR); return false; }
+        received = sdcard_file_read(trailer, sizeof(trailer));
+        if (received < 0)
+        { mzf_set_error_P(PSTR("QD READ"), MZF_PLAYBACK_IO_ERROR); return false; }
+        if ((received != (int16_t)sizeof(trailer)) ||
+            (trailer[0] != 'C') || (trailer[1] != 'R') || (trailer[2] != 'C'))
+        { mzf_set_error_P(PSTR("QD BODY CRC"), MZF_PLAYBACK_BAD_FILE); return false; }
     }
 
     mzf_mzt_record_count = record_count;
@@ -2528,15 +2592,18 @@ static bool mzf_locate_mzq_record(uint16_t wanted_record)
     uint8_t prefix[40];
     int16_t received;
     mzf_mzq_physical_source = false;
+    mzf_qd_analysis_cancelled = false;
     if (!sdcard_file_seek(0UL))
     { mzf_set_error_P(PSTR("QD SEEK"), MZF_PLAYBACK_IO_ERROR); return false; }
     received = sdcard_file_read(prefix, sizeof(prefix));
+    if (received < 0)
+    { mzf_set_error_P(PSTR("QD READ"), MZF_PLAYBACK_IO_ERROR); return false; }
     if (received < 8)
     { mzf_set_error_P(PSTR("QD SHORT"), MZF_PLAYBACK_BAD_FILE); return false; }
 
-    if ((received >= 40) && (memcmp(prefix, "HXCQDDRV", 8U) == 0))
+    if (memcmp(prefix, "HXCQDDRV", 8U) == 0)
     {
-        if (!mzf_mzq_configure_physical(prefix, true) ||
+        if ((received < 40) || !mzf_mzq_configure_physical(prefix, true) ||
             !mzf_locate_physical_mzq_record(wanted_record))
         { mzf_qd_set_error_unless_cancelled(PSTR("QD HXC"), MZF_PLAYBACK_BAD_FILE); return false; }
         return true;
@@ -2590,7 +2657,7 @@ static bool mzf_prepare_current_record(loader_mode_t loader_mode)
     file_format_t loader_format = mzf_format;
     uint32_t loader_file_end = mzf_file_size;
     bool loader_active;
-    mzf_mzq_prefill_deferred = false;
+    mzf_mzq_duration_deferred = false;
     if (loader_mode == LOADER_MODE_AUTO) loader_mode = LOADER_MODE_NORMAL_1_1;
     mzf_configure_normal_speed(loader_mode);
     mzf_original_data_offset = mzf_mzq_physical_source ? 0UL : sdcard_file_position();
@@ -2607,6 +2674,19 @@ static bool mzf_prepare_current_record(loader_mode_t loader_mode)
     }
     loader_active = mzf_loader_prepare(loader_format, loader_mode, mzf_header,
                                        loader_file_end, mzf_original_data_offset);
+    /* Refused fast loaders use the same safe NORMAL 1:1 fallback while the
+       user browses records. Show the effective profile in the selector. */
+    if ((mzf_format == FILE_FORMAT_MZQ) && !loader_active &&
+        (loader_mode != LOADER_MODE_NORMAL_1_1) &&
+        (loader_mode != LOADER_MODE_NORMAL_1_2) &&
+        (loader_mode != LOADER_MODE_NORMAL_1_3) &&
+        (loader_mode != LOADER_MODE_NORMAL_1_4) &&
+        (loader_mode != LOADER_MODE_MZ700_1X))
+    {
+        loader_mode = LOADER_MODE_NORMAL_1_1;
+        mzf_configure_normal_speed(loader_mode);
+        mzf_mzt_record_loader_mode = loader_mode;
+    }
     if (loader_active)
     {
         if (!mzf_loader_patch_loader_header(mzf_header))
@@ -2638,14 +2718,16 @@ static bool mzf_prepare_current_record(loader_mode_t loader_mode)
     {
         if (mzf_mzq_physical_source)
         {
-            /* The selector needs only the decoded header. Scanning the whole
-               MFM body for duration and then filling the FIFO can hold the
-               keypad long enough to manufacture a repeat event from one
-               FFWD/REW press. Decode the body only after PLAY is confirmed. */
+            /* Fill only the playback FIFO while selecting a physical record.
+               Keep the whole-body duration scan on PLAY, so navigation does
+               not decode the complete MFM payload for every selection. */
             mzf_exact_duration_half_ms = 0UL;
             mzf_record_data_read = 0UL;
             mzf_fifo_reset();
-            mzf_mzq_prefill_deferred = true;
+            if (!mzf_record_source_seek(mzf_original_data_offset))
+            { mzf_set_error_P(PSTR("QD SEEK"), MZF_PLAYBACK_IO_ERROR); return false; }
+            if (!mzf_prefill_data()) return false;
+            mzf_mzq_duration_deferred = true;
         }
         else
         {
@@ -2844,7 +2926,7 @@ void mzf_playback_init(void)
     mzf_mzq_raw_buffer_length = 0U;
     mzf_playback_invalidate_qd_cache();
     mzf_tape_turbo_payload_prepared = false;
-    mzf_mzq_prefill_deferred = false;
+    mzf_mzq_duration_deferred = false;
     mzf_stage = MZF_STAGE_NONE;
     mzf_boundary_waiting = false;
     mzf_motor_low_seen = 0U;
@@ -2897,7 +2979,7 @@ bool mzf_playback_prepare(const char *path, file_format_t format,
     if (!sdcard_file_open_read(path))
     { mzf_set_error_P(PSTR("MZF OPEN"), MZF_PLAYBACK_IO_ERROR); return false; }
     mzf_file_size = sdcard_file_size();
-    if (mzf_file_size < MZF_HEADER_BYTES)
+    if ((format != FILE_FORMAT_MZQ) && (mzf_file_size < MZF_HEADER_BYTES))
     {
         sdcard_file_close();
         mzf_set_error_P(PSTR("MZF SHORT"), MZF_PLAYBACK_BAD_FILE);
@@ -2931,41 +3013,29 @@ bool mzf_playback_start(void)
 {
     if ((mzf_state != MZF_PLAYBACK_READY) && (mzf_state != MZF_PLAYBACK_PAUSED)) return false;
     mzf_qd_load_cancelled = false;
-    if (mzf_mzq_prefill_deferred)
+    if (mzf_mzq_duration_deferred)
     {
         mzf_qd_load_active = true;
         mzf_qd_analysis_cancelled = false;
         if (mzf_qd_progress_callback != NULL)
             mzf_qd_progress_callback(MZF_QD_PROGRESS_LOADING);
         if (!mzf_calculate_current_mzt_normal_duration() ||
-            !mzf_record_source_seek(mzf_original_data_offset))
+            !mzf_record_source_seek(mzf_original_data_offset + mzf_record_data_read))
         {
+            mzf_qd_load_active = false;
             if (mzf_qd_load_cancelled)
             {
                 mzf_error_text[0] = '\0';
                 mzf_state = MZF_PLAYBACK_READY;
-                mzf_record_data_read = 0UL;
-                mzf_fifo_reset();
                 return false;
             }
             mzf_set_error_P(PSTR("QD SEEK"), MZF_PLAYBACK_IO_ERROR);
             return false;
         }
-        mzf_record_data_read = 0UL;
-        mzf_fifo_reset();
-        if (!mzf_prefill_data())
-        {
-            if (mzf_qd_load_cancelled)
-            {
-                mzf_error_text[0] = '\0';
-                mzf_state = MZF_PLAYBACK_READY;
-                mzf_record_data_read = 0UL;
-                mzf_fifo_reset();
-            }
-            return false;
-        }
+        /* Duration scanning uses the work buffer, leaving the prepared FIFO
+           intact. Resume SD/MFM reads after those bytes instead of refilling. */
         mzf_qd_load_active = false;
-        mzf_mzq_prefill_deferred = false;
+        mzf_mzq_duration_deferred = false;
     }
     mzf_state = MZF_PLAYBACK_RUNNING;
     if (mzf_stage != MZF_STAGE_ULTRAFAST) mz_sense_set(false);
@@ -3043,7 +3113,7 @@ void mzf_playback_stop(void)
     mzf_original_data_offset = 0UL;
     mzf_original_data_length = 0UL;
     mzf_tape_turbo_payload_prepared = false;
-    mzf_mzq_prefill_deferred = false;
+    mzf_mzq_duration_deferred = false;
     mzf_qd_load_active = false;
     mzf_qd_load_cancelled = false;
     mzf_native_copy_index = 0U;
