@@ -297,7 +297,8 @@ button_event_t keypad_get_event(void)
     {
         uint16_t held_ms = (uint16_t)(now - press_start_ms);
 
-        if (keypad_button_uses_press_repeat(active_button))
+        if (keypad_button_uses_press_repeat(active_button) &&
+            (raw_button == active_button))
         {
             if (!repeat_started)
             {
@@ -341,6 +342,16 @@ void keypad_ignore_until_release(void)
     last_raw_button = BUTTON_NONE;
     stable_button = BUTTON_NONE;
     keypad_clear_press();
+}
+
+void keypad_restart_repeat_timer(void)
+{
+    if (!keypad_button_uses_press_repeat(active_button)) return;
+    const uint16_t now = (uint16_t)millis();
+    press_start_ms = now;
+    last_repeat_ms = now;
+    /* Preserve repeat_started: a deliberate hold keeps the repeat cadence,
+       but time spent in synchronous record preparation never counts. */
 }
 
 void keypad_set_calibration(const keypad_calibration_t *calibration)

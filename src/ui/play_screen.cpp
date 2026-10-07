@@ -338,11 +338,11 @@ play_screen_action_t play_screen_handle_event(button_event_t event)
     {
         case BUTTON_EVENT_UP_PRESS:
         case BUTTON_EVENT_UP_REPEAT:
-            (void)play_controller_select_mzt_record(-1);
+            if (play_controller_select_mzt_record(-1)) keypad_restart_repeat_timer();
             return PLAY_SCREEN_ACTION_NONE;
         case BUTTON_EVENT_DOWN_PRESS:
         case BUTTON_EVENT_DOWN_REPEAT:
-            (void)play_controller_select_mzt_record(1);
+            if (play_controller_select_mzt_record(1)) keypad_restart_repeat_timer();
             return PLAY_SCREEN_ACTION_NONE;
         case BUTTON_EVENT_SELECT_SHORT: return PLAY_SCREEN_ACTION_TOGGLE_PLAY;
         case BUTTON_EVENT_LEFT_SHORT:

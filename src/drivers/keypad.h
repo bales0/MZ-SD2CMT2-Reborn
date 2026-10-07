@@ -61,6 +61,10 @@ button_event_t keypad_get_event(void);
    operation consumes STOP directly instead of through the event queue. */
 void keypad_ignore_until_release(void);
 
+/* Resume the current UP/DOWN repeat timer after synchronous navigation.
+   Keeps the initial delay/repeat phase and does not discard the next press. */
+void keypad_restart_repeat_timer(void);
+
 void keypad_set_calibration(const keypad_calibration_t *calibration);
 
 void keypad_get_default_calibration(keypad_calibration_t *calibration);
