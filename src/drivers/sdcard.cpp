@@ -719,6 +719,10 @@ static bool sdcard_open_directory_for_browser(const char *path,
 
 static bool sdcard_finish_browser_directory_read(FsFile *directory)
 {
+    /* openNext(false) can mean either EOF or a FAT read failure. Check before
+       close() discards the handle; CID alone cannot distinguish these cases. */
+    bool read_failed = (directory != NULL) && directory->isOpen() &&
+                       (directory->getError() != 0U);
     if ((directory != NULL) && directory->isOpen())
     {
         directory->close();
@@ -726,7 +730,13 @@ static bool sdcard_finish_browser_directory_read(FsFile *directory)
 
     /* Retain software removal detection for boards without CARD DETECT, but a
        single transient CID miss is now tolerated by sdcard_probe_present(). */
-    return sdcard_probe_present();
+    if (!sdcard_probe_present()) return false;
+    if (read_failed)
+    {
+        sdcard_set_error_P(PSTR("DIR FAIL"));
+        return false;
+    }
+    return true;
 }
 
 bool sdcard_scan_directory_first_sorted(const char *path,

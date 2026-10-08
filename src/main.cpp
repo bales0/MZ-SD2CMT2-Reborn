@@ -169,7 +169,8 @@ static bool run_keypad_calibration(keypad_calibration_t *calibration)
 
 static void app_enter_browser(void)
 {
-    browser_restore_saved_position();
+    /* UI return retains RAM state; only filesystem changes need a refresh. */
+    browser_resume();
     current_screen = APP_SCREEN_BROWSER;
     lcd_clear();
 }
@@ -276,6 +277,10 @@ static void app_handle_record_event(button_event_t event)
 {
     record_screen_action_t action = record_screen_handle_event(event);
     record_engine_state_t state = record_engine_get_state();
+    const char *error = record_engine_get_error_text();
+    const bool filesystem_error = (state == RECORD_ENGINE_ERROR) &&
+        ((strcmp_P(error, PSTR("MKDIR FAIL")) == 0) ||
+         (strcmp_P(error, PSTR("DIR FAIL")) == 0));
 
     if (action == RECORD_SCREEN_ACTION_TOGGLE_PAUSE)
     {
@@ -300,13 +305,26 @@ static void app_handle_record_event(button_event_t event)
                  (state == RECORD_ENGINE_ERROR) ||
                  (state == RECORD_ENGINE_STOPPED))
         {
-            browser_refresh();
+            if (filesystem_error)
+            {
+                browser_recover_sd();
+            }
+            else
+            {
+                browser_refresh();
+            }
             app_enter_browser();
         }
         return;
     }
     if (action == RECORD_SCREEN_ACTION_CANCEL_BACK)
     {
+        if (filesystem_error)
+        {
+            browser_recover_sd();
+            app_enter_browser();
+            return;
+        }
         if ((state == RECORD_ENGINE_ARMED) ||
             (state == RECORD_ENGINE_RECORDING) ||
             (state == RECORD_ENGINE_PAUSED) ||
