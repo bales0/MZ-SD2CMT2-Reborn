@@ -1,7 +1,7 @@
 # MZ-SD2CMT2 – Reborn
 ## Quick Reference Guide
 
-**Firmware 2.0**
+**Firmware 2.0.2**
 
 This guide contains the basic controls and everyday operating steps only.
 
@@ -68,12 +68,22 @@ LOADER    = NORMAL
 SPEED     = 1:1
 ```
 
-If your library contains matching MFI/MTI information, use:
+If your library contains matching MFI/M2I/MTI information, use:
 
 ```text
 PLAY CTRL = MOTOR
 LOADER    = AUTO
 ```
+
+Exact companions: MZF -> MFI, M12 -> M2I, MZT -> MTI. M2I uses MFI syntax;
+there is no cross-format lookup. Manual selection wins. Compatible M12 files
+support the same loaders as MZF. An unsafe generated/turbo/UL request falls
+back to complete NORMAL 1:1 timing for all Sharp files, including physical
+QD; READY/selector shows the effective profile. Metadata files are hidden.
+
+For an IC 1:2 M12 example, copy [EXAMPLE.M2I](../examples/EXAMPLE.M2I) beside
+your tape and rename it to the same basename (`GAME.M12` + `GAME.M2I`).
+See [all sidecar templates](../examples/README.md).
 
 ---
 
@@ -95,7 +105,7 @@ files can be imported from one QuickDisk image.
 
 During container playback, **STOP** first returns to the record selector. Press **STOP** again to return to the main browser.
 
-QuickDisk images are read-only. MFI/MTI sidecars do not apply to them; with
+QuickDisk images are read-only. MFI/M2I/MTI sidecars do not apply to them; with
 `LOADER=AUTO`, playback uses the safe `NORMAL 1:1` fallback.
 
 ---

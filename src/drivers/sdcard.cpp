@@ -634,10 +634,10 @@ static bool sdcard_browser_entry_visible(const sdcard_entry_t *entry)
     middle = sdcard_ascii_upper(entry->name[length - 2U]);
     last = sdcard_ascii_upper(entry->name[length - 1U]);
 
-    /* MFI/MTI are metadata companions, not playable browser entries.
+    /* MFI/M2I/MTI are metadata companions, not playable browser entries.
        MZI is also hidden for media compatibility. */
     return !((last == 'I') &&
-             ((middle == 'F') || (middle == 'T') || (middle == 'Z')));
+             ((middle == 'F') || (middle == '2') || (middle == 'T') || (middle == 'Z')));
 }
 
 static int8_t sdcard_compare_entry_names(const char *left, const char *right)

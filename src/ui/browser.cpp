@@ -769,7 +769,8 @@ static bool browser_current_has_info_sidecar(void)
     }
 
     format = file_format_detect_from_name(current_entry.name);
-    if ((format != FILE_FORMAT_MZF) && (format != FILE_FORMAT_MZT))
+    if ((format != FILE_FORMAT_MZF) && (format != FILE_FORMAT_M12) &&
+        (format != FILE_FORMAT_MZT))
     {
         return false;
     }
@@ -790,9 +791,7 @@ static bool browser_current_has_info_sidecar(void)
     memcpy(cmt_session_path_buffer + output_offset, current_entry.name,
            name_length + 1U);
 
-    current_info_sidecar = (format == FILE_FORMAT_MZF) ?
-        mzi_sidecar_exists_for_mzf(cmt_session_path_buffer) :
-        mzi_sidecar_exists_for_mzt(cmt_session_path_buffer);
+    current_info_sidecar = mzi_sidecar_exists_for_tape(cmt_session_path_buffer, format);
     return current_info_sidecar;
 }
 

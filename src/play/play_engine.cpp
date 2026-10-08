@@ -305,17 +305,17 @@ static bool play_engine_prepare_mzf(void)
 
     prepared_loader_from_info_sidecar = false;
 
-    /* Manual PLAY selection has priority. AUTO reads same-basename .MFI for
-       a single MZF. MZT resolves each internal record from .MTI in
-       mzf_playback. M12 has no sidecar and uses NORMAL MZ800 1:1. */
+    /* Manual selection wins. Single records use MFI (MZF) or M2I (M12);
+       MZT resolves each record from MTI in mzf_playback. */
     if (effective_loader_mode == LOADER_MODE_AUTO)
     {
-        if (prepared_format == FILE_FORMAT_MZF)
+        if ((prepared_format == FILE_FORMAT_MZF) ||
+            (prepared_format == FILE_FORMAT_M12))
         {
             effective_loader_mode = LOADER_MODE_NORMAL_1_1;
             prepared_loader_from_info_sidecar =
-                mzi_sidecar_read_loader_for_mzf(
-                    prepared_full_path, &effective_loader_mode);
+                mzi_sidecar_read_loader_for_tape(
+                    prepared_full_path, prepared_format, &effective_loader_mode);
         }
         else if (!file_format_is_record_container(prepared_format))
         {
@@ -806,7 +806,7 @@ const char *play_engine_get_mzt_record_title(void)
 
 loader_mode_t play_engine_get_mzt_record_loader_mode(void)
 {
-    return file_format_is_record_container(prepared_format) ?
+    return file_format_is_sharp_tape(prepared_format) ?
         mzf_playback_get_mzt_record_loader_mode() : prepared_loader_mode;
 }
 

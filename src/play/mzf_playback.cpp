@@ -2664,6 +2664,7 @@ static bool mzf_prepare_current_record(loader_mode_t loader_mode)
     mzf_original_data_length = mzf_record_data_length;
     mzf_mzt_record_loader_mode = loader_mode;
     mzf_capture_mzt_record_title();
+    if (mzf_format == FILE_FORMAT_M12) loader_format = FILE_FORMAT_MZF;
     if (file_format_is_record_container(mzf_format))
     {
         loader_format = FILE_FORMAT_MZF;
@@ -2676,7 +2677,7 @@ static bool mzf_prepare_current_record(loader_mode_t loader_mode)
                                        loader_file_end, mzf_original_data_offset);
     /* Refused fast loaders use the same safe NORMAL 1:1 fallback while the
        user browses records. Show the effective profile in the selector. */
-    if ((mzf_format == FILE_FORMAT_MZQ) && !loader_active &&
+    if (!loader_active &&
         (loader_mode != LOADER_MODE_NORMAL_1_1) &&
         (loader_mode != LOADER_MODE_NORMAL_1_2) &&
         (loader_mode != LOADER_MODE_NORMAL_1_3) &&
@@ -2684,8 +2685,17 @@ static bool mzf_prepare_current_record(loader_mode_t loader_mode)
         (loader_mode != LOADER_MODE_MZ700_1X))
     {
         loader_mode = LOADER_MODE_NORMAL_1_1;
+        mzf_loader_reset();
         mzf_configure_normal_speed(loader_mode);
         mzf_mzt_record_loader_mode = loader_mode;
+        /* Single files were measured before loader preparation. Re-measure
+           with the recovered NORMAL profile, not the rejected UL leaders. */
+        if (!file_format_is_record_container(mzf_format))
+        {
+            if (!mzf_calculate_total_duration() || !mzf_read_header_record()) return false;
+            mzf_total_duration_ms = (mzf_exact_duration_half_ms == 0xFFFFFFFFUL) ?
+                0xFFFFFFFFUL : (mzf_exact_duration_half_ms + 1UL) / 2UL;
+        }
     }
     if (loader_active)
     {
@@ -3222,8 +3232,7 @@ const char *mzf_playback_get_mzt_record_title(void)
 { return file_format_is_record_container(mzf_format) ? mzf_mzt_record_title : ""; }
 loader_mode_t mzf_playback_get_mzt_record_loader_mode(void)
 {
-    return file_format_is_record_container(mzf_format) ?
-        mzf_mzt_record_loader_mode : mzf_requested_loader_mode;
+    return mzf_mzt_record_loader_mode;
 }
 bool mzf_playback_get_mzt_record_loader_from_sidecar(void)
 {

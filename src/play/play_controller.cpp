@@ -87,17 +87,8 @@ static bool play_controller_can_start(void)
 
 static void play_controller_refresh_info_sidecar(void)
 {
-    session_has_info_sidecar = false;
-    if (session_format == FILE_FORMAT_MZF)
-    {
-        session_has_info_sidecar =
-            mzi_sidecar_exists_for_mzf(session_full_path);
-    }
-    else if (session_format == FILE_FORMAT_MZT)
-    {
-        session_has_info_sidecar =
-            mzi_sidecar_exists_for_mzt(session_full_path);
-    }
+    session_has_info_sidecar =
+        mzi_sidecar_exists_for_tape(session_full_path, session_format);
 }
 
 static void play_controller_clear_pause_reason(void)

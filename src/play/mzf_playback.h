@@ -73,6 +73,7 @@ bool mzf_playback_is_ul_loader_active(void);
 uint16_t mzf_playback_get_mzt_record_index(void);
 uint16_t mzf_playback_get_mzt_record_count(void);
 const char *mzf_playback_get_mzt_record_title(void);
+/* Effective profile for the current Sharp record, including single MZF/M12. */
 loader_mode_t mzf_playback_get_mzt_record_loader_mode(void);
 /* True only when the current MZT RECORD=n resolved a valid loader from MTI. */
 bool mzf_playback_get_mzt_record_loader_from_sidecar(void);

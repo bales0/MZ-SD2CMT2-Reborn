@@ -2,11 +2,11 @@
 ## User Handbook
 
 **Extended SD-card CMT emulator / recorder for Sharp MZ computers**  
-**Handbook draft for firmware 2.0**
+**Handbook draft for firmware 2.0.2**
 
 > **Draft status**
 >
-> This is the first full user-handbook draft. It is intentionally more detailed than the project README and is designed both for users who simply want to replace the cassette recorder and for experienced users who want to use loader profiles, MZT containers, MFI/MTI metadata, direct MZF recording, AutoName and diagnostic information.
+> This is the first full user-handbook draft. It is intentionally more detailed than the project README and is designed both for users who simply want to replace the cassette recorder and for experienced users who want to use loader profiles, MZT containers, MFI/M2I/MTI metadata, direct MZF recording, AutoName and diagnostic information.
 >
 > The layout and wording are intended to be refined before a later PDF edition. LCD examples in this Markdown version are text mock-ups of the real 16×2 display. In the final PDF they can be replaced or supplemented by graphical LCD renders and photographs.
 
@@ -28,7 +28,7 @@
 8. [Playing files](#8-playing-files)
 9. [PLAY settings](#9-play-settings)
 10. [Loader modes and speed profiles](#10-loader-modes-and-speed-profiles)
-11. [MFI and MTI metadata](#11-mfi-and-mti-metadata)
+11. [MFI, M2I and MTI metadata](#11-mfi-m2i-and-mti-metadata)
 12. [MZT multi-record tapes and QuickDisk images](#12-mzt-multi-record-tapes-and-quickdisk-images)
 13. [Recording](#13-recording)
 14. [AutoName and automatic profile detection](#14-autoname-and-automatic-profile-detection)
@@ -48,7 +48,7 @@ MZ-SD2CMT2 can be used at two very different levels.
 
 ### If you only want a cassette replacement
 
-You do **not** need to understand tape timing, loader profiles, MFI/MTI files or Ultra Fast loading. For normal use, read:
+You do **not** need to understand tape timing, loader profiles, MFI/M2I/MTI files or Ultra Fast loading. For normal use, read:
 
 - Quick Start
 - Front-panel controls
@@ -66,7 +66,7 @@ Continue with:
 - Loader modes and speed profiles
 - Ultra Fast loading
 - MZT containers
-- MFI/MTI metadata
+- MFI/M2I/MTI metadata
 - direct MZF recording
 - AutoName
 - detected tape profiles
@@ -101,7 +101,7 @@ The firmware supports:
 - automatic recognition of several loader/tape profiles
 - NORMAL and turbo playback profiles
 - Ultra Fast loading
-- MFI/MTI sidecar metadata
+- MFI/M2I/MTI sidecar metadata
 - MOTOR-controlled, AUTO-triggered and MANUAL playback/recording
 - optional switching between the internal SD emulator and an external physical CMT unit
 
@@ -316,7 +316,7 @@ The browser is alphabetically sorted.
 
 ### `I` instead of `/` in the counter
 
-If the highlighted MZF or MZT has matching playback metadata, the separator changes.
+If the highlighted MZF, M12 or MZT has matching playback metadata, the separator changes.
 
 Normal:
 
@@ -333,6 +333,7 @@ Metadata available:
 The `I` means an information sidecar exists:
 
 - `.MFI` for an `.MZF`
+- `.M2I` for an `.M12`
 - `.MTI` for an `.MZT`
 
 Example:
@@ -450,7 +451,7 @@ The PLAY screen can use the following state abbreviations:
 |---|---|
 | `RDY` | source prepared / ready |
 | `PLY` | playing |
-| `PLA` | playing using loader information selected automatically from MFI/MTI metadata |
+| `PLA` | playing using loader information selected automatically from MFI/M2I/MTI metadata |
 | `PAU` | paused |
 | `ERR` | playback error |
 
@@ -466,6 +467,19 @@ Example:
 ```
 
 The `MFI` prefix shows that the MZF loader profile is being taken from the matching `.MFI`.
+
+M12 uses the `M2I` prefix when AUTO reads a valid matching `.M2I`. In READY,
+a single Sharp file also shows the effective loader/profile, for example:
+
+```text
+M2I GAME.M12
+RDY IC2  01:00
+```
+
+The time depends on the record. After an unsafe loader is rejected, the profile
+becomes `N11`, with full NORMAL 1:1 timing. Accepted UL profiles show `--:--`
+because the payload duration depends on the live handshake.
+
 
 ---
 
@@ -610,7 +624,7 @@ Meaning:
 `I` and `MTI` confirm that the record has been resolved using the `.MTI` sidecar.
 
 MZQ/QDF/QD images use the same selector layout. Their entries do not use
-MFI/MTI metadata, so the second line shows the manually selected profile or the
+MFI/M2I/MTI metadata, so the second line shows the manually selected profile or the
 `NORMAL 1:1` fallback used by `LOADER=AUTO`.
 
 ### Manually forced loader
@@ -888,7 +902,7 @@ The second line contains the specific error when available.
 
 # 6. Using the SD-card browser
 
-The browser displays only user-relevant media entries. Playback metadata such as `.MFI` and `.MTI` is hidden.
+The browser displays only user-relevant media entries. `.MFI`, `.M2I` and `.MTI` playback metadata is hidden.
 
 ## 6.1 Moving through entries
 
@@ -940,7 +954,7 @@ During active PLAY, media removal aborts the stream safely. Reinserting the card
 | **MZQ** | yes | no | Sharp legacy logical QuickDisk image |
 | **QDF** | yes | no | CRC-protected QuickDisk byte-stream image |
 | **QD** | yes | no | content-detected logical, HxC or FlashFloppy QuickDisk image |
-| **M12** | yes | no | Sharp tape-format variant supported by playback |
+| **M12** | yes | no | Single Sharp record; applicable MZF loaders, AUTO via M2I |
 | **WAV** | yes | yes | sampled physical tape waveform |
 | **LEP** | yes | yes | compact pulse-duration representation, 50 µs unit |
 | **L16** | yes | yes | finer pulse-duration representation, 16 µs unit |
@@ -1284,6 +1298,20 @@ For MZT:
 
 A manually selected loader always wins over metadata.
 
+For M12, AUTO uses only same-basename `.M2I`, with the same single-record
+syntax as MFI. Missing or invalid M2I means NORMAL 1:1. MFI and M2I are never
+substituted for each other, so MZF and M12 tapes with the same basename can
+coexist. The extension does not infer MZ700/MZ800.
+
+Compatible M12 records support the same manual NORMAL, MZ700 FAST3, IC, TC
+and UL/UL_MZ800/UL_MZ700 profiles as MZF, with all existing safety checks.
+For every Sharp format, an unsafe generated/turbo/UL request falls back to
+full NORMAL 1:1 timing, including normal header/data leaders and marks, and
+clears UL/loader state. This includes logical MZQ, QDF and physical MFM QD.
+The READY screen and record selector show the effective profile; the menu
+retains your requested setting for the next compatible record. A valid M2I
+selected in AUTO gives M12 the `M2I` filename prefix.
+
 ---
 
 ## 10.4 UL – Ultra Fast
@@ -1393,10 +1421,10 @@ The 16×2 LCD cannot show long loader names all the time, so the firmware uses c
 It is useful to distinguish **three different spellings of the same function**:
 
 1. the human-readable PLAY menu name;
-2. the keyword used in an MFI/MTI sidecar;
+2. the keyword used in an MFI/M2I/MTI sidecar;
 3. the compact label used on the LCD.
 
-| Function | PLAY menu | MFI / MTI | LCD |
+| Function | PLAY menu | MFI / M2I / MTI | LCD |
 |---|---|---|---|
 | Normal MZ timing 1:1 | `NORMAL` + `1:1` | `TYPE=NORMAL` + `SPEED=1:1` | `N11` |
 | Normal MZ timing 1:2 | `NORMAL` + `1:2` | `TYPE=NORMAL` + `SPEED=1:2` | `N12` |
@@ -1530,7 +1558,7 @@ One is a detection/status display; the other is a playback-loader selection.
 |---|---|
 | I do not know | `NORMAL 1:1` for safety, or `AUTO` when metadata is available |
 | I want the most compatible normal load | `NORMAL 1:1` |
-| My library includes correct MFI/MTI | `AUTO` |
+| My library includes correct MFI/M2I/MTI | `AUTO` |
 | I want maximum speed and know the MZF is UL-compatible | `UL` |
 | I specifically need MZ-800 UL | `UL MZ800` / `UL8` |
 | I specifically need MZ-700 UL | `UL MZ700` / `UL7` |
@@ -1542,18 +1570,24 @@ If a fast mode fails, go back to a slower/more compatible profile before suspect
 
 ---
 
-# 11. MFI and MTI metadata
+# 11. MFI, M2I and MTI metadata
 
 Earlier development discussions used the generic name **MZI**, and the internal firmware module is still named `mzi_sidecar.*`.
 
-The **current external file formats are explicitly MFI and MTI**:
+The **current external metadata extensions are MFI, M2I and MTI**:
 
 ```text
 GAME.MZF  -> GAME.MFI
+GAME.M12  -> GAME.M2I
 TAPE.MZT  -> TAPE.MTI
 ```
 
 > There is **no `.MZI` fallback** in the current format. `.MZI` is not read or written.
+
+M2I is the M12 counterpart of MFI: all single-record TYPE/SPEED examples
+below also work in `.M2I`. It shares the MFI parser. Lookup stays exact;
+neither extension is a fallback for the other. M2I is hidden from browser
+counts and sorting, with the same `I` presence indicator as the other sidecars.
 
 ---
 
@@ -1573,6 +1607,21 @@ TYPE=UL_MZ800
 ```
 
 MFI is used only when PLAY loader selection is `AUTO`.
+
+### M2I - the same syntax for one M12
+
+Use [EXAMPLE.M2I](../examples/EXAMPLE.M2I) as a ready-to-copy IC 1:2 example:
+
+```text
+TYPE=IC
+SPEED=1:2
+```
+
+For `GAME.M12`, save it beside the tape as `GAME.M2I` and select
+`LOADER=AUTO`. The same supported TYPE/SPEED combinations apply as for MFI;
+single-record M2I has no `RECORD=n` sections. Missing/invalid M2I falls back
+to NORMAL 1:1. See [all example templates](../examples/README.md).
+
 
 If the user selects `TC`, `IC`, `UL`, `NORMAL`, etc. manually, that manual selection has priority.
 
@@ -1646,7 +1695,7 @@ The sidecar is therefore **playback policy**, not program data.
 
 The important rule is:
 
-> **MFI/MTI is consulted only when PLAY `LOADER = AUTO`.**
+> **MFI/M2I/MTI is consulted only when PLAY `LOADER = AUTO`.**
 
 ### MZF
 
@@ -2178,11 +2227,26 @@ The selected entry is converted in memory to a 128-byte MZF tape header and sent
 through the normal CMT output. When that entry finishes, playback returns to the
 selector rather than continuing into the next QuickDisk file.
 
+The same compatible manual loader families are available for logical records
+and physical HxC/FlashFloppy records. An unsafe generated/turbo/UL request
+falls back to complete NORMAL 1:1 timing, including normal header/data leaders
+and marks, with `N11` shown in the selector. Your requested menu setting is
+retained for the next compatible record.
+
+For physical QD in NORMAL/AUTO, selecting a record already fills the playback
+FIFO. Full duration measurement is deferred until PLAY, which preserves those
+buffered bytes. Cancelling the duration scan leaves the selector ready to retry.
+During accepted UL playback, the full bar is a readiness indication: the
+existing UL path reads and sends small blocks synchronously, bypassing the
+normal FIFO, so its bar does not track FIFO occupancy. This also applies to
+MZF and M12 UL playback. Physical throughput and handshake still need testing
+on the actual Mega2560 and Sharp target.
+
 QuickDisk support has these deliberate limits:
 
 - images are read-only and are never modified;
 - it is file playback through CMT, not MZ-1F11 drive emulation;
-- MFI and MTI sidecars do not apply;
+- MFI, M2I and MTI sidecars do not apply;
 - `LOADER=AUTO` falls back to `NORMAL 1:1`; select another compatible loader
   manually in PLAY settings if required.
 
@@ -2915,7 +2979,7 @@ PLAY CTRL = MOTOR
 LOADER    = AUTO
 ```
 
-MFI/MTI can then choose the intended loader per file/record.
+MFI/M2I/MTI can then choose the intended loader per file/record.
 
 ---
 
@@ -3177,7 +3241,7 @@ The hardware limit is expected behaviour, not necessarily a firmware bug.
 
 ---
 
-## 19.16 MFI/MTI seems ignored
+## 19.16 MFI/M2I/MTI seems ignored
 
 Check:
 
@@ -3187,6 +3251,10 @@ Check:
 3. for MZT use `.MTI`;
 4. the `RECORD=n` section exists;
 5. TYPE/SPEED combination is valid.
+
+For M12, use `GAME.M12` + `GAME.M2I`, with the same syntax as MFI. A valid
+sidecar can still request an unsafe loader; check the effective profile on
+the READY screen/selector, which shows NORMAL 1:1 after rejection.
 
 Remember that a manually selected loader always overrides metadata.
 
@@ -3198,6 +3266,7 @@ Current external metadata format is:
 
 ```text
 GAME.MFI
+GAME.M2I
 TAPE.MTI
 ```
 
@@ -3324,11 +3393,11 @@ This keeps captures separate from the user's library folders and gives AutoName 
 
 ## 20.9 Metadata visibility
 
-MFI/MTI are intentionally hidden from the browser.
+MFI/M2I/MTI are intentionally hidden from the browser.
 
 They do not count toward the visible `N/N` item total.
 
-This prevents a directory from appearing to contain duplicate user programs simply because each MZF has a sidecar.
+This prevents a directory from appearing to contain duplicate user programs simply because a tape has a sidecar.
 
 ---
 
@@ -3338,7 +3407,7 @@ This prevents a directory from appearing to contain duplicate user programs simp
 Live header recognition used to derive a meaningful filename and optional detected profile from a recording.
 
 ### AUTO playback
-Loader mode that uses MFI/MTI when available and falls back safely when metadata is missing.
+Loader mode that uses MFI/M2I/MTI when available and falls back safely when metadata is missing.
 
 ### AUTO recording
 Activity-triggered recording mode. Capture starts from detected signal activity and ends after the idle timeout.
@@ -3363,6 +3432,16 @@ Pulse-duration format using a 16 µs unit.
 
 ### MFI
 **MZF Information** sidecar used by this project for playback metadata belonging to one MZF. It is consulted in `LOADER=AUTO` mode and can select `TYPE` and `SPEED` without modifying the MZF itself.
+
+### M2I
+M12 AUTO sidecar with the same single-record syntax as MFI. `GAME.M12` reads
+only `GAME.M2I`; it never substitutes `GAME.MFI`. Both tape formats can coexist
+with the same basename and independent loader settings.
+
+### M12
+Single Sharp 128-byte header plus declared payload. Compatible records support
+the same manual loaders as MZF, with existing safety checks. AUTO uses M2I;
+the filename extension does not determine the target machine.
 
 ### MOTOR
 Sharp CMT control signal used to start/stop the virtual transport.
@@ -3430,9 +3509,10 @@ Pause caused by the Sharp MOTOR signal.
 
 # Revision note – sidecars and multi-part software
 
-This revision documents firmware 2.0 QuickDisk image playback, corrected
-REWIND/FFWD navigation, fresh SD-card retry behaviour and the use of MZTools for
-preparing files and metadata.
+This revision documents firmware 2.0.2: QuickDisk image playback, corrected
+REWIND/FFWD navigation, SD-card retry behaviour, M12 fast loaders, M2I AUTO
+metadata, effective-profile display and full NORMAL 1:1 recovery after unsafe
+loader requests. It also covers the use of MZTools for preparing files and metadata.
 
 
 # Documentation notes for the next revision

@@ -20,6 +20,8 @@ static const char text_error[] PROGMEM = "ERR %.12s";
 static const char text_unknown[] PROGMEM = "UNKNOWN";
 static const char text_unsupported[] PROGMEM = "UNSUPPORTED";
 static const char text_play_time[] PROGMEM = "%s %02u:%02u/%02u:%02u";
+static const char text_play_profile_time[] PROGMEM = "%s %-4s %02u:%02u";
+static const char text_play_profile_unknown[] PROGMEM = "%s %-4s --:--";
 static const char text_play_percent[] PROGMEM = "%s        %03u%% ";
 static const char text_play_phase_percent[] PROGMEM = "%s %-3s    %03u%% ";
 static const char text_mzt_select_time[] PROGMEM = "SEL %-4s %02u:%02u";
@@ -315,10 +317,11 @@ static void build_play_line0(const play_controller_view_t *view, char *line0)
         memcpy(line0 + prefix_length, scrolled,
                (uint8_t)(15U - prefix_length));
     }
-    else if (view->loader_from_info_sidecar && (view->format == FILE_FORMAT_MZF))
+    else if (view->loader_from_info_sidecar &&
+             ((view->format == FILE_FORMAT_MZF) || (view->format == FILE_FORMAT_M12)))
     {
         line0[0] = 'M';
-        line0[1] = 'F';
+        line0[1] = (view->format == FILE_FORMAT_M12) ? '2' : 'F';
         line0[2] = 'I';
         line0[3] = ' ';
         copy_scrolling_filename(scrolled, view->filename, 11U);
@@ -441,6 +444,22 @@ void play_screen_render(const play_controller_view_t *view)
                                     text_mzt_select_time,
                                 mode_label,
                                 (unsigned int)total_minutes,
+                                (unsigned int)total_seconds);
+        }
+    }
+    else if (file_format_is_sharp_tape(view->format) &&
+             (view->state == PLAY_CONTROLLER_STATE_READY))
+    {
+        flash_text_copy(mode_label, sizeof(mode_label),
+                        mzt_loader_label_P(view->mzt_record_loader_mode));
+        flash_text_copy(label, sizeof(label), play_state_to_label_P(view));
+        if (view->total_duration_ms == 0UL)
+            flash_text_snprintf(line1, sizeof(line1), text_play_profile_unknown, label, mode_label);
+        else
+        {
+            play_time_parts(view->total_duration_ms, &total_minutes, &total_seconds);
+            flash_text_snprintf(line1, sizeof(line1), text_play_profile_time, label,
+                                mode_label, (unsigned int)total_minutes,
                                 (unsigned int)total_seconds);
         }
     }
